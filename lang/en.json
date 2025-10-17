@@ -1,0 +1,4 @@
+{
+    "manual_restart_disabled": "{yellow}Manual server restart is disabled by config.",
+    "restarting_now": "{green}Restarting server now..."
+}
