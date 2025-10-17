@@ -3,16 +3,20 @@
 
 This is a simple plugin that automatically restarts the server.
 
-# Requirements
+## Requirements
 [Latest release of Counter Strike Sharp](https://github.com/roflmuffin/CounterStrikeSharp)
 
 
-# Instalation
+## Instalation
 - Download the latest release
 - Extract the .zip file into `addons/counterstrikesharp/plugins`
 - Enjoy
 
-### Configuration
+## Command
+
+`css_restart`
+
+## Configuration
 
 Configuration file generated on addons/counterstrikesharp/configs/plugins/AutoRestart/AutoRestart.json
 ```json
