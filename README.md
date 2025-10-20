@@ -28,3 +28,6 @@ Configuration file generated on addons/counterstrikesharp/configs/plugins/AutoRe
   "ConfigVersion": 1
 }
 ```
+
+## Official Discord (Updates/Downloads)
+<a href="https://discord.gg/d5uvMmUpuE"><img src="./discord.png"></a>
