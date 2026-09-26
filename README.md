@@ -3,6 +3,12 @@
 
 This is a simple plugin that automatically restarts the server.
 
+<div align="center">
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-Support_Development-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000000)](https://buymeacoffee.com/cs4fun)
+
+</div>
+
 ## Requirements
 [Latest release of Counter Strike Sharp](https://github.com/roflmuffin/CounterStrikeSharp)
 
