@@ -21,7 +21,6 @@ This is a simple plugin that automatically restarts the server.
 Configuration file generated on addons/counterstrikesharp/configs/plugins/AutoRestart/AutoRestart.json
 ```json
 {
-{
   "AutoRestartEnabled": true,
   "EnableManualRestart": true,
   "Flag": "@css/root",
@@ -31,7 +30,6 @@ Configuration file generated on addons/counterstrikesharp/configs/plugins/AutoRe
   "WebhookEnabled": false,
   "WebhookUrl": "",
   "ConfigVersion": 1
-}
 }
 ```
 
