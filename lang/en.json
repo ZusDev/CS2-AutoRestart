@@ -2,7 +2,7 @@
     "manual_restart_disabled": "{green}[SERVER RESTART] {white}Manual server restart is disabled by config.",
     "restarting_now": "{green}[SERVER RESTART] {white}Server restart requested.",
     "restart_countdown": "{green}[SERVER RESTART] {white}Server will restart in {0} seconds.",
-    "webhook_message": "Server successfully restart",
+    "webhook_message": "Server successfully restarted",
     "webhook_log": "Log",
     "webhook_map": "Map",
     "webhook_players": "Players",
