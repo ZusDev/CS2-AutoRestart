@@ -10,6 +10,10 @@ using System.Text.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Localization;
+using CounterStrikeSharp.API.Modules.Cvars;
+using System.Net.Http;
+using System.Net.Http.Json;
+using System.Threading.Tasks;
 
 namespace AutoRestart
 {
@@ -26,19 +30,42 @@ namespace AutoRestart
 
         [JsonPropertyName("AutoRestartTime")]
         public string AutoRestartTime { get; set; } = "01:00:00";
+
+        [JsonPropertyName("NotifyBeforeRestart")]
+        public int NotifyBeforeRestart { get; set; } = 60;
+
+        [JsonPropertyName("AlertInterval")]
+        public int AlertInterval { get; set; } = 10;
+
+        [JsonPropertyName("WebhookEnabled")]
+        public bool WebhookEnabled { get; set; } = false;
+
+        [JsonPropertyName("WebhookUrl")]
+        public string WebhookUrl { get; set; } = "";
     }
 
     public class AutoRestart : BasePlugin, IPluginConfig<AutoRestartConfig>
     {
         public override string ModuleName => "AutoRestart";
-        public override string ModuleVersion => "1.0.0";
+        public override string ModuleVersion => "1.0.1";
         public override string ModuleAuthor => "M1k@c";
 
         public required AutoRestartConfig Config { get; set; }
         private static IStringLocalizer? _Localizer;
+        private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(4) };
+        private bool _restartPending;
+        private bool _manualRestartPending;
+        private readonly List<CounterStrikeSharp.API.Modules.Timers.Timer> _restartTimers = new();
+
+        private void AddRestartTimer(float delay, Action callback)
+        {
+            _restartTimers.Add(AddTimer(delay, callback));
+        }
 
         public void OnConfigParsed(AutoRestartConfig config)
         {
+            config.NotifyBeforeRestart = Math.Max(0, config.NotifyBeforeRestart);
+            config.AlertInterval = Math.Max(1, config.AlertInterval);
             Config = config;
         }
 
@@ -48,7 +75,7 @@ namespace AutoRestart
 
             _Localizer = Localizer;
 
-            AddCommand("css_restart", "Restart the server immediately", (player, info) => RestartCommand(player));
+            AddCommand("css_restart", "Restart the server after the configured countdown", (player, info) => RestartCommand(player));
 
             if (Config.AutoRestartEnabled)
             {
@@ -58,7 +85,7 @@ namespace AutoRestart
 
         private bool HasAdminPermission(CCSPlayerController? player)
         {
-            return player != null && AdminManager.PlayerHasPermissions(player, Config.Flag);
+            return string.IsNullOrWhiteSpace(Config.Flag) || (player != null && AdminManager.PlayerHasPermissions(player, Config.Flag));
         }
 
         private void ScheduleAutoRestart()
@@ -76,7 +103,96 @@ namespace AutoRestart
 
             Console.WriteLine($"[AutoRestart] Server will restart at {restartTime} ({delay.TotalSeconds} seconds from now).");
 
-            AddTimer((float)delay.TotalSeconds, RestartServer);
+            BeginRestart(delay.TotalSeconds);
+        }
+
+        private void BeginRestart(double delaySeconds)
+        {
+            if (_restartPending)
+                return;
+
+            _restartPending = true;
+            int warningSeconds = (int)Math.Min(Config.NotifyBeforeRestart, Math.Floor(delaySeconds));
+
+            for (int remaining = warningSeconds; remaining > 0;)
+            {
+                int seconds = remaining;
+                double alertDelay = delaySeconds - seconds;
+
+                if (alertDelay <= 0)
+                    NotifyPlayers(seconds);
+                else
+                    AddRestartTimer((float)alertDelay, () => NotifyPlayers(seconds));
+
+                if (remaining <= Config.AlertInterval)
+                    break;
+
+                remaining -= Config.AlertInterval;
+            }
+
+            if (Config.WebhookEnabled && !string.IsNullOrWhiteSpace(Config.WebhookUrl))
+            {
+                if (delaySeconds <= 5)
+                    SendRestartWebhook();
+                else
+                    AddRestartTimer((float)(delaySeconds - 5), SendRestartWebhook);
+            }
+
+            if (delaySeconds <= 0)
+                RestartServer();
+            else
+                AddRestartTimer((float)delaySeconds, RestartServer);
+        }
+
+        private void NotifyPlayers(int seconds)
+        {
+            foreach (var player in Utilities.GetPlayers())
+            {
+                if (player.IsValid && !player.IsBot && !player.IsHLTV)
+                    player.PrintToChat(Localizer.ForPlayer(player, "restart_countdown", seconds));
+            }
+        }
+
+        private void SendRestartWebhook()
+        {
+            string serverName = ConVar.Find("hostname")?.StringValue ?? "CS2 Server";
+            string map = Server.MapName;
+            int players = Utilities.GetPlayers().Count(player => player.IsValid && !player.IsBot && !player.IsHLTV);
+            DateTimeOffset now = DateTimeOffset.Now;
+            var payload = new
+            {
+                embeds = new[]
+                {
+                    new
+                    {
+                        title = serverName,
+                        color = 3066993,
+                        timestamp = now.ToUniversalTime().ToString("O"),
+                        fields = new[]
+                        {
+                            new { name = Localizer["webhook_map"].Value, value = map, inline = true },
+                            new { name = Localizer["webhook_players"].Value, value = players.ToString(), inline = true },
+                            new { name = Localizer["webhook_date"].Value, value = now.ToString("yyyy-MM-dd HH:mm:ss"), inline = false },
+                            new { name = Localizer["webhook_log"].Value, value = Localizer["webhook_message"].Value, inline = false }
+                        }
+                    }
+                }
+            };
+            _ = PostWebhookAsync(Config.WebhookUrl, payload);
+        }
+
+        private static async Task PostWebhookAsync(string url, object payload)
+        {
+            try
+            {
+                using var response = await Http.PostAsJsonAsync(url, payload);
+                if (!response.IsSuccessStatusCode)
+                    Console.WriteLine($"[AutoRestart] Restart webhook failed: HTTP {(int)response.StatusCode}.");
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"[AutoRestart] Restart webhook failed ({exception.GetType().Name}).");
+            }
         }
 
         private void RestartServer()
@@ -100,6 +216,7 @@ namespace AutoRestart
                     if (player?.IsValid == true)
                         player.PrintToChat(_Localizer?.ForPlayer(player, "manual_restart_disabled") ?? "Manual restart is disabled.");
                 });
+
                 return;
             }
 
@@ -109,7 +226,16 @@ namespace AutoRestart
                 if (player?.IsValid == true)
                     player.PrintToChat(_Localizer?.ForPlayer(player, "restarting_now") ?? "Restarting server now...");
             });
-            RestartServer();
+            
+            if (_manualRestartPending)
+                return;
+
+            foreach (var timer in _restartTimers)
+                timer.Kill();
+            _restartTimers.Clear();
+            _restartPending = false;
+            _manualRestartPending = true;
+            BeginRestart(Config.NotifyBeforeRestart);
         }
     }
 }
